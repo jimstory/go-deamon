@@ -30,11 +30,11 @@ func worker(i int,queueChan chan string)  {
 		str := ""
 		for !quit {
 			str  = <- queueChan
-			fmt.Println("worker id："+ strconv.Itoa(i) + " queue value :" + str)
+			lib.Trace.Println("worker id："+ strconv.Itoa(i) + " queue value :" + str)
+			// 每隔协程处理时长，此处用来测试
 			j := 30 - i
 			time.Sleep((time.Second * time.Duration(j)))
 		}
-
 		if str != "" {
 			cmd := redisConn.RPush("queue1",str)
 			if cmd.Err() != nil {
@@ -78,26 +78,29 @@ func main()  {
 	// 从redis 队列取值，放入chan
 	go func() {
 		for {
-			// 每隔10 s ，从redis 取次数据
-			val, err := redisConn.BLPop(time.Second*10, "queue1").Result()
-			if err != nil {
-				if err == redis.Nil {
-					//fmt.Println("queue is empty")
+			select {
+				// 收到中断信号，退出协程
+				case <- quitChan :
+					return
+			default:
+				// 每隔10 s ，从redis 取次数据
+				val, err := redisConn.BLPop(time.Second*10, "queue1").Result()
+				if err != nil {
+					if err == redis.Nil {
+						//fmt.Println("queue is empty")
+					} else {
+						panic(err.Error())
+					}
 				} else {
-					panic(err.Error())
+					if !quit {
+						// 信号没关闭，放入信道
+						queueChan <- val[1]
+					} else {
+						<- queueChan
+						lib.Trace.Println("this is 丢失数据" + val[1])
+						redisConn.LPush("queue1", val)
+					}
 				}
-			} else {
-				if !quit {
-					// 信号没关闭，放入信道
-					queueChan <- val[1]
-				} else {
-					<- queueChan
-					lib.Trace.Println("this is 丢失数据" + val[1])
-				}
-				//else {
-				//	// 信号已关闭，重新放入redis
-				//	redisConn.LPush("queue1", val)
-				//}
 			}
 		}
 	}()
