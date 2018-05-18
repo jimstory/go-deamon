@@ -15,12 +15,13 @@ var waitGroup sync.WaitGroup
 
 // 建立redis 链接
 var  redisConn = redis.NewClient(&redis.Options{
-Addr:     "localhost:6379",
-Password: "", // no password set
-DB:       0,  // use default DB
+	Addr:     "localhost:6379",
+	Password: "", // no password set
+	DB:       0,  // use default DB
 })
 // 是否结束程序
-var  quit bool =false
+var  quit =false
+var quitChan = make(chan bool)
 
 func worker(i int,queueChan chan string)  {
 	waitGroup.Add(1)
@@ -30,11 +31,23 @@ func worker(i int,queueChan chan string)  {
 		for !quit {
 			str  = <- queueChan
 			fmt.Println("worker id："+ strconv.Itoa(i) + " queue value :" + str)
+			j := 30 - i
+			time.Sleep((time.Second * time.Duration(j)))
 		}
-		redisConn.LPush("queue1",str)
-		lib.Trace.Println("worker id："+ strconv.Itoa(i) + " set to redis  queue value :" + str)
+
+		if str != "" {
+			cmd := redisConn.RPush("queue1",str)
+			if cmd.Err() != nil {
+				fmt.Printf("%s\n", cmd.Err().Error())
+			}
+			lib.Trace.Println("worker id："+ strconv.Itoa(i) + " set to redis  queue value :" + str)
+		}
+
 		waitGroup.Done()
 	}(i)
+
+	// 依次开启10 个worker
+	time.Sleep(time.Second*1)
 }
 
 func main()  {
@@ -51,34 +64,22 @@ func main()  {
 		<-sigs
 		// 收到信号，进行退出,关闭信道
 		quit = true
+		quitChan <- true
 		close(queueChan)
 		lib.Trace.Println("accept 中断信号")
-		os.Exit(155)
 	}()
 
 
 	// 生成worker 协程
-	for i:= 0;i<10;i++ {
-		//worker(i,queueChan)
-
-		waitGroup.Add(1)
-		go func(i int) {
-			// 如果程序不结束，一直执行
-			str := ""
-			for !quit {
-				str  = <- queueChan
-				fmt.Println("worker id："+ strconv.Itoa(i) + " queue value :" + str)
-			}
-			redisConn.LPush("queue1",str)
-			lib.Trace.Println("worker id："+ strconv.Itoa(i) + " set to redis  queue value :" + str)
-			waitGroup.Done()
-		}(i)
+	for i:= 1;i<11;i++ {
+		worker(i,queueChan)
 	}
 
 	// 从redis 队列取值，放入chan
 	go func() {
 		for {
-			val, err := redisConn.LPop("queue1").Result()
+			// 每隔10 s ，从redis 取次数据
+			val, err := redisConn.BLPop(time.Second*10, "queue1").Result()
 			if err != nil {
 				if err == redis.Nil {
 					//fmt.Println("queue is empty")
@@ -86,11 +87,18 @@ func main()  {
 					panic(err.Error())
 				}
 			} else {
-				queueChan <- val
+				if !quit {
+					// 信号没关闭，放入信道
+					queueChan <- val[1]
+				} else {
+					<- queueChan
+					lib.Trace.Println("this is 丢失数据" + val[1])
+				}
+				//else {
+				//	// 信号已关闭，重新放入redis
+				//	redisConn.LPush("queue1", val)
+				//}
 			}
-
-			// 每隔10s 取一次数据
-			time.Sleep(time.Second*10)
 		}
 	}()
 
