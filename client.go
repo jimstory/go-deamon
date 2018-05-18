@@ -13,9 +13,12 @@ import (
 
 var waitGroup sync.WaitGroup
 
+var redisAddr = lib.GetConfigure("REDIS_HOST") +":"+ lib.GetConfigure("REDIS_PORT")
+
+
 // 建立redis 链接
 var  redisConn = redis.NewClient(&redis.Options{
-	Addr:     "localhost:6379",
+	Addr:     redisAddr,
 	Password: "", // no password set
 	DB:       0,  // use default DB
 })
@@ -30,17 +33,17 @@ func worker(i int,queueChan chan string)  {
 		str := ""
 		for !quit {
 			str  = <- queueChan
-			lib.Trace.Println("worker id："+ strconv.Itoa(i) + " queue value :" + str)
+			lib.Trace.Println("worker id："+ strconv.Itoa(i) + " ,queue value :" + str)
 			// 每隔协程处理时长，此处用来测试
-			j := 30 - i
-			time.Sleep((time.Second * time.Duration(j)))
+
+			time.Sleep((time.Second * time.Duration(10)))
 		}
 		if str != "" {
 			cmd := redisConn.RPush("queue1",str)
 			if cmd.Err() != nil {
 				fmt.Printf("%s\n", cmd.Err().Error())
 			}
-			lib.Trace.Println("worker id："+ strconv.Itoa(i) + " set to redis  queue value :" + str)
+			lib.Trace.Println("worker id："+ strconv.Itoa(i) + " ,set to redis  queue value :" + str)
 		}
 
 		waitGroup.Done()
@@ -96,8 +99,7 @@ func main()  {
 						// 信号没关闭，放入信道
 						queueChan <- val[1]
 					} else {
-						<- queueChan
-						lib.Trace.Println("this is 丢失数据" + val[1])
+						// 重新放入redis
 						redisConn.LPush("queue1", val)
 					}
 				}
