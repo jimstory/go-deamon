@@ -1,0 +1,7 @@
+TRACE: 2018/05/18 /home/buyf/go/src/goDeamon/client.go:72: accept 中断信号
+TRACE: 2018/05/18 /home/buyf/go/src/goDeamon/client.go:36: worker id：1 ,queue value :
+TRACE: 2018/05/18 /home/buyf/go/src/goDeamon/client.go:36: worker id：6 ,queue value :
+TRACE: 2018/05/18 /home/buyf/go/src/goDeamon/client.go:36: worker id：5 ,queue value :
+TRACE: 2018/05/18 /home/buyf/go/src/goDeamon/client.go:36: worker id：4 ,queue value :
+TRACE: 2018/05/18 /home/buyf/go/src/goDeamon/client.go:36: worker id：3 ,queue value :
+TRACE: 2018/05/18 /home/buyf/go/src/goDeamon/client.go:36: worker id：2 ,queue value :
